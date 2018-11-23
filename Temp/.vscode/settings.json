@@ -1,0 +1,5 @@
+{
+	"python.jediMemoryLimit": 1024,
+	"python.analysis.symbolsHierarchyDepthLimit": 20,
+	"python.globalModuleInstallation": true
+}
