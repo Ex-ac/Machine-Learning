@@ -29,7 +29,7 @@ print(california_housing_dataframe)
 print(california_housing_dataframe.describe())
 
 # Define the input feature: total_rooms.
-my_feature = california_housing_dataframe[["total_rooms"]]
+my_feature = california_housing_dataframe["total_rooms"]
 
 # Configure a numeric feature column for total_rooms.
 feature_columns = [tf.feature_column.numeric_column("total_rooms")]
@@ -240,7 +240,8 @@ def train_model(learning_rate, steps, batch_size, input_feature="total_rooms"):
 
 
 train_model(
-    learning_rate=0.00003,
+    learning_rate=0.00002,
     steps=1000,
-    batch_size=100
+    batch_size=5,
+    input_feature="population"
 )
