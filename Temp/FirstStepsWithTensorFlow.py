@@ -17,7 +17,7 @@ tf.logging.set_verbosity(tf.logging.ERROR);
 pd.options.display.max_rows = 10;
 pd.options.display.float_format = "{:.1f}".format;
 
-californiaHousingDataFrame = pd.read_csv("https://download.mlcc.google.cn/mledu-datasets/california_housing_train.csv", sep = ",");
+californiaHousingDataFrame = pd.read_csv("./data.csv", sep = ",");
 
 
 californiaHousingDataFrame = californiaHousingDataFrame.reindex(np.random.permutation(californiaHousingDataFrame.index));
@@ -48,15 +48,12 @@ def myInputFn(features, targets, batchSize = 1, shuffle = True, numEpochs = None
 	ds = Dataset.from_tensor_slices((features, targets));
 	# 数据集的批次，和按照重复的周期数
 	ds = ds.batch(batch_size = batchSize).repeat(numEpochs); 
-
-
-
-
 	if shuffle:
 		# 数据的抽样大小
 		ds.shuffle(buffer_size = 10000);
 	
 	features, labels = ds.make_one_shot_iterator().get_next();
+
 	return features, labels;
 
 '''
@@ -115,4 +112,4 @@ def trainModel(learningRate, steps, inputData, inputFeatures = [], inputLabels =
 
 	print("Model training finished.");
 
-trainModel(0.00001, 1500, californiaHousingDataFrame, ["population"], ["median_house_value"], 1000);
+trainModel(0.00001, 2000, californiaHousingDataFrame, ["population"], ["median_house_value"], 200);
