@@ -1,160 +1,163 @@
 # -*- coding:utf-8 -*-
+
 import math
 from IPython import display
 from matplotlib import cm
-from matplotlib import pyplot as plt
 from matplotlib import gridspec
+from matplotlib import pyplot as plt
+import tensorflow as tf
+from tensorflow.python.data import Dataset
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from sklearn import metrics
-from tensorflow.python.data import Dataset
 
-tf.logging.set_verbosity(tf.logging.ERROR);
-pd.options.display.max_rows = 10;
-pd.options.display.float_format = "{:.2f}".format
+def preprocessFeatures(dataFrame):
+	seriesSelect = ["longitude", "latitude", "housing_median_age", "total_rooms", "total_bedrooms", "population", "households", "median_income"];
 
-dataFrame = pd.read_csv("E:/Study/Python/Machine-Learning/data.csv", sep = ',');
-dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index));
+	features = dataFrame[seriesSelect];
 
-def preprocess_features(dataFrame = pd.DataFrame()):
+	features["rooms_per_person"] = features["total_rooms"] / features["population"];
+	return features;
 
-	selectedFeature = dataFrame[["longitude", "latitude", "housing_median_age", "total_rooms","total_bedrooms", "population", "households", "median_income"]];
+def preprocessTargets(dataFrame):
+	targets = pd.DataFrame();
 
-	processFeatures = selectedFeature.copy();
-	processFeatures["rooms_per_person"] = processFeatures["total_rooms"] / processFeatures["population"];
-	return processFeatures;
+	targets["median_house_value"] = (dataFrame["median_house_value"] / 1000.0);
 
-def preprocess_targets(dataFrame = pd.DataFrame()):
-	outputTarget = pd.DataFrame();
-	outputTarget["median_house_value"] = dataFrame["median_house_value"] / 1000.0;
-	return outputTarget;
+	return targets;
 
-trainingExamples = preprocess_features(dataFrame.head(12000));
-print(trainingExamples.describe());
+def inputFun(inputFeatures, inputTargets, batchSize = 1, shuffle = True, numEpoch = None):
 
-trainingTargets = preprocess_targets(dataFrame.head(12000));
-print(trainingTargets.describe());
+	features = {key : np.array(value) for key, value in dict(inputFeatures).items()};
 
-validationExamples = preprocess_features(dataFrame.tail(5000));
-print(validationExamples.describe());
-
-validationTargets = preprocess_targets(dataFrame.tail(5000));
-print(validationTargets.describe());
-
-plt.figure(figsize=(13, 8));
-
-ax = plt.subplot(1, 2, 1);
-ax.set_title("Validation Data");
-
-ax.set_autoscaley_on(False);
-ax.set_ylim([32, 43]);
-
-ax.set_autoscalex_on(False);
-ax.set_xlim([-126, -112]);
-
-plt.scatter(validationExamples["longitude"], validationExamples["latitude"], cmap="coolwarm", c=validationTargets["median_house_value"] / validationTargets["median_house_value"].max());
-
-
-ax = plt.subplot(1,2,2)
-ax.set_title("Training Data")
-
-ax.set_autoscaley_on(False)
-ax.set_ylim([32, 43])
-ax.set_autoscalex_on(False)
-ax.set_xlim([-126, -112])
-plt.scatter(trainingExamples["longitude"], trainingExamples["latitude"], cmap="coolwarm", c=trainingTargets["median_house_value"] / trainingTargets["median_house_value"].max())
-
-plt.show();
-
-def inputFun(features, targets, batchSize = 1, shuffle = True, numEpochs = None):
-	
-	features = {key:np.array(value) for key, value in dict(features).items()};
-
-	ds = Dataset.from_tensor_slices((features, targets));
-	ds = ds.batch(batchSize).repeat(numEpochs);
+	ds = Dataset.from_tensor_slices((features, inputTargets));
+	ds = ds.batch(batchSize).repeat(numEpoch);
 
 	if shuffle:
 		ds = ds.shuffle(10000);
+	
 	features, labels = ds.make_one_shot_iterator().get_next();
 
 	return features, labels;
 
-def createFeaturesColumns(features):
-	return set([tf.feature_column.numeric_column(feature) for feature in features]);
+def createColumnFeatures(features):
+	return [tf.feature_column.numeric_column(i) for i in features];
 
-def trainModel(learningRata, steps, batchSize, trainingExamples, trainingTargets, validationExamples, validationTargets):
+def trainModel(learningRate, steps, trainDataFrame, validationDataFrame, batchSize):
 
 	periods = 10;
 	stepPerPeriod = steps / periods;
 
-	optimizer = tf.train.GradientDescentOptimizer(learningRata);
+
+	trainFeatures = preprocessFeatures(trainDataFrame);
+	trainTargets = preprocessTargets(trainDataFrame);
+
+	validationFeatures = preprocessFeatures(validationDataFrame);
+	validationTargets = preprocessTargets(validationDataFrame);
+
+	optimizer = tf.train.GradientDescentOptimizer(learningRate);
 	optimizer = tf.contrib.estimator.clip_gradients_by_norm(optimizer, 5.0);
 
-	linearRegressor = tf.estimator.LinearRegressor(feature_columns = createFeaturesColumns(trainingExamples), optimizer = optimizer);
+	linearRegressor = tf.estimator.LinearRegressor(feature_columns = createColumnFeatures(trainFeatures), optimizer = optimizer);
 
-	trainingInputFun = lambda : inputFun(trainingExamples, trainingTargets, batchSize);
+	trainInputFun = lambda : inputFun(trainFeatures, trainTargets, batchSize);
 
-	predictTrainingInputFun = lambda : inputFun(trainingExamples, trainingTargets, 1, False, 1)
+	trainPredictInputFun = lambda : inputFun(trainFeatures, trainTargets, batchSize = 1, shuffle = False, numEpoch = 1);
 
-	perdictValidationInputFun = lambda : inputFun(validationExamples, validationTargets, 1, False, 1);
+	validationPredictInputFun = lambda : inputFun(validationFeatures, validationTargets, shuffle = False, numEpoch = 1);
 
-	print("Training model...");
-	print("RMSE (on training data):");
+	trainRSMEs = [];
+	validationRSMEs = [];
 
-	trainingRMSEs = [];
-	validationRMSEs = [];
+	print("Training Model...");
 	for i in range(0, periods):
-		linearRegressor.train(trainingInputFun, steps = stepPerPeriod);
+		linearRegressor.train(steps = stepPerPeriod, input_fn = trainInputFun);
 
-		trainingPredicitions = linearRegressor.predict(input_fn = predictTrainingInputFun);
-		trainingPredicitions = np.array([item["predictions"][0] for item in trainingPredicitions]);
+		trainPredictions = linearRegressor.predict(input_fn = trainPredictInputFun);
+		trainPredictions = np.array([i["predictions"][0] for i in trainPredictions]);
 
-		validationPredicitions = linearRegressor.predict(input_fn = perdictValidationInputFun);
-		validationPredicitions = np.array([item["predictions"][0] for item in validationPredicitions]);
+		validationPredictions = linearRegressor.predict(input_fn = validationPredictInputFun);
+		validationPredictions = np.array([i["predictions"][0] for i in validationPredictions]);
 
-		trainingRootMeanSquaredError = math.sqrt(metrics.mean_squared_error(trainingTargets, trainingPredicitions));
+		trainRSME = math.sqrt(metrics.mean_squared_error(trainTargets, trainPredictions));
 
-		validationRootMeanSquaredError = math.sqrt(metrics.mean_squared_error(validationTargets, validationPredicitions));
+		validationRSME = math.sqrt(metrics.mean_squared_error(validationTargets, validationPredictions));
 
-		trainingRMSEs.append(trainingRootMeanSquaredError);
-		validationRMSEs.append(validationRootMeanSquaredError);
+		trainRSMEs.append(trainRSME);
+		validationRSMEs.append(validationRSME);
 
-		print("    %2d : %0.2f	%0.2f" % (i, trainingRootMeanSquaredError, validationRootMeanSquaredError));
+		print("\tPeriod %2d, %0.2f, %0.2f" % (i, trainRSME, validationRSME));
 	
-	print("Model training finished.");
+	print("Training finished.");
 
-	plt.ylabel("RMES");
+	plt.figure();
+	plt.ylabel("RSME")
 	plt.xlabel("Periods");
+	plt.title("RSEM vs. Periods");
 
-	plt.title("Root Mean Squared Error vs. Periods");
-
-	plt.tight_layout();
-	plt.plot(trainingRMSEs, label = "training");
-	plt.plot(validationRMSEs, label = "validations");
+	plt.plot(trainRSMEs, label = "Train");
+	plt.plot(validationRSMEs, label = "Validations");
 
 	plt.legend();
 
-
 	return linearRegressor;
 
-linearRegressor = trainModel(0.00003, 500, 5, trainingExamples, trainingTargets, validationExamples, validationTargets);
+
+tf.logging.set_verbosity(tf.logging.ERROR);
+pd.options.display.max_rows = 10;
+pd.options.display.float_format = "{:.2f}".format;
+
+dataFrame = pd.read_csv("E:/Study/Python/Machine-Learning/data.csv", sep = ",");
+
+
+dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index));
+
+
+trainingDataFrame = dataFrame.head(12000);
+validationDataFrame = dataFrame.tail(5000);
+
+
+
+
+# 绘制在同一个图中绘制俩个数据集的直方图，观察数据分布是否均匀，该方法只适合在各个特征都是没有关联的，例如latitude, longitude是无关的关联数据
+'''
+columns = len(trainingDataFrame.columns);
+
+for index, i in zip(trainingDataFrame.columns, range(0, columns)):
+
+	figure = plt.figure(i);
+
+	plt.title(index);
+
+	plt.subplot(1, 2, 1);
+
+	plt.title("traning " + index);
+
+	trainingDataFrame[index].hist(density = True);
+
+	plt.subplot(1, 2, 2);
+	plt.title("validation " + index);
+	validationDataFrame[index].hist(density = True);
+
+'''
+
+linearRegressor = trainModel(0.00003, 500, trainingDataFrame, validationDataFrame, 5);
+
+
+testDataFrame = pd.read_csv("E:/Study/Python/Machine-Learning/test.csv", sep = ',');
+
+testPerdictionFeatures = preprocessFeatures(testDataFrame);
+testPerdictionTargets = preprocessTargets(testDataFrame);
+
+testPerdictionInputFun = lambda : inputFun(testPerdictionFeatures, testPerdictionTargets, batchSize = 1, shuffle = False, numEpoch = 1);
+
+testPredictions  = linearRegressor.predict(input_fn = testPerdictionInputFun);
+testPredictions = np.array([i["predictions"][0] for i in testPredictions]);
+
+testRMSE = math.sqrt(metrics.mean_squared_error(testPerdictionTargets, testPredictions));
+
+print("test RMSE: %0.2f" % testRMSE);
 
 plt.show();
 
-testDataFrame = pd.read_csv("https://download.mlcc.google.cn/mledu-datasets/california_housing_test.csv", sep=",");
 
-testFreatures = preprocess_features(testDataFrame);
-testTargets = preprocess_targets(testDataFrame);
-
-testInputFun = lambda : inputFun(testFreatures, testTargets, 1, False, 1);
-
-testPerdictions = linearRegressor.predict(input_fn = testInputFun);
-testPerdictions = np.array([i["predictions"][0] for i in testPerdictions]);
-
-rootMeanSquaredError = math.sqrt(metrics.mean_squared_error(testTargets, testPerdictions));
-
-print("RMSE (on test data) : %0.2f" % rootMeanSquaredError);
-
-
-cmake .. -A x64 -DCMAKE_BUILD_TYPE=Release -DSWIG_EXECUTABLE="D:\swigwin\swig.exe" -DPYTHON_EXECUTABLE="D:\Python36\python.exe" -DPYTHON_LIBRARIES="D:\Python36\libs\python36.dll" -Dtensorflow_WIN_CPU_SIMD_OPTIONS=/arch:AVX2
