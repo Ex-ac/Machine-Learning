@@ -136,6 +136,6 @@ validactionExample = {
 
 # trainModel(learningRate, steps, batchSize, trainingExample, validationExample):
 
-linearRegressor = trainModel(learningRate = 0.05, steps = 5000, batchSize = 100, trainingExample = trainingExample, validationExample = validactionExample);
+linearRegressor = trainModel(learningRate = 0.02, steps = 500, batchSize = 100, trainingExample = trainingExample, validationExample = validactionExample);
 
 plt.show();
