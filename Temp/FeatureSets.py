@@ -12,130 +12,175 @@ from tensorflow.python.data import Dataset
 from sklearn import metrics
 
 
-def preprocessFeatures(dataFrame):
-	selectedFeatureList = [
-		"latitude",
-		"longitude",
-		"housing_median_age",
-		"total_rooms",
-		"population",
-		"households",
-		"median_income"
-	];
+def preprocessFeatures(dataFrame, selectedFeatureList):
 
-	selectedFeatures = dataFrame[selectedFeatureList];
+    selectedFeatures = dataFrame[selectedFeatureList]
 
-	resultFeatures = selectedFeatures.copy();
+    resultFeatures = selectedFeatures.copy()
 
-	resultFeatures["rooms_per_person"] = dataFrame["total_rooms"] / dataFrame["population"];
+    resultFeatures["rooms_per_person"] = dataFrame["total_rooms"] / \
+        dataFrame["population"]
 
-	return resultFeatures;
+    return resultFeatures
+
 
 def preprocessTargets(dataFrame):
-	resultTargets = pd.DataFrame();
 
-	resultTargets = dataFrame["median_house_value"]  / 1000.00;
-	return resultTargets;
+    resultTargets = pd.DataFrame()
+
+    resultTargets["median_house_value"] = dataFrame["median_house_value"] / \
+        1000.00
+    return resultTargets
+
 
 def creatureFeatureColunm(inputFeature):
-	return set([tf.feature_column.numeric_column(i) for i in inputFeature]);
-
-def inputFun(inputDataFrame, batchSize = 1, shuffle = True, numEpoch = None):
-	
-
-	features = {key:np.array(value) for key, value in dict(inputDataFrame["features"]).items()};
-
-	ds = Dataset.from_tensor_slices((features, inputDataFrame["targets"]));
-	ds = ds.batch(batchSize).repeat(numEpoch);
-
-	if shuffle:
-		ds = ds.shuffle(10000);
-		
-	resultFeatures, resultTargets = ds.make_one_shot_iterator().get_next();
-	return resultFeatures, resultTargets;
+    return set([tf.feature_column.numeric_column(i) for i in inputFeature])
 
 
-def trainModel(learningRate, steps, batchSize, trainingExample, validationExample):
+def inputFun(inputDataFrame, batchSize=1, shuffle=True, numEpoch=None):
+
+    features = {key: np.array(value) for key, value in dict(
+        inputDataFrame["features"]).items()}
+
+    ds = Dataset.from_tensor_slices((features, inputDataFrame["targets"]))
+    ds = ds.batch(batchSize).repeat(numEpoch)
+
+    if shuffle:
+        ds = ds.shuffle(10000)
+
+    resultFeatures, resultTargets = ds.make_one_shot_iterator().get_next()
+    return resultFeatures, resultTargets
 
 
-	priods = 10;
-	stepsPerPeriod = steps / priods;
+def trainModel(learningRate, steps, batchSize, trainingExample,
+               validationExample):
 
-	trainingInputFun = lambda : inputFun(trainingExample, batchSize);
-	predictTraningInputFun = lambda : inputFun(trainingExample, shuffle=False, numEpoch = 1);
+    priods = 10
+    stepsPerPeriod = steps / priods
 
-	predictValidationInputFun = lambda : inputFun(validationExample, shuffle = False, numEpoch = 1);
+    def trainingInputFun(): return inputFun(trainingExample, batchSize)
 
-	optimizer = tf.train.GradientDescentOptimizer(learning_rate = learningRate);
-	optimizer = tf.contrib.estimator.clip_gradients_by_norm(optimizer, 5.0);
+    def predictTraningInputFun(): return inputFun(
+        trainingExample, shuffle=False, numEpoch=1)
 
-	linearRegressor = tf.estimator.LinearRegressor(feature_columns = creatureFeatureColunm(trainingExample["features"]), optimizer =optimizer);
+    def predictValidationInputFun(): return inputFun(
+        validationExample, shuffle=False, numEpoch=1)
 
-	print("Training Model...");
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=learningRate)
+    optimizer = tf.contrib.estimator.clip_gradients_by_norm(optimizer, 5.0)
 
-	trainingRMSEs = [];
-	validationRMSEs = [];
-	for i in range(0, priods):
+    linearRegressor = tf.estimator.LinearRegressor(
+        feature_columns=creatureFeatureColunm(
+                                            trainingExample["features"]),
+        optimizer=optimizer)
 
-		linearRegressor.train(input_fn = trainingInputFun, steps = stepsPerPeriod);
+    print("Training Model...")
 
-		trainingPredictions = linearRegressor.predict(input_fn = predictTraningInputFun);
+    trainingRMSEs = []
+    validationRMSEs = []
+    for i in range(0, priods):
 
-		trainingPredictions = np.array([i["predictions"][0] for i in trainingPredictions]);
+        linearRegressor.train(input_fn=trainingInputFun, steps=stepsPerPeriod)
 
-		trainingRMSE = math.sqrt(metrics.mean_squared_error(trainingExample["targets"], trainingPredictions));
+        trainingPredictions = linearRegressor.predict(
+            input_fn=predictTraningInputFun)
 
-		validationPredictions = linearRegressor.predict(input_fn = predictValidationInputFun);
+        trainingPredictions = np.array(
+            [i["predictions"][0] for i in trainingPredictions])
 
-		validationPredictions = np.array([i["predictions"][0] for i in validationPredictions]);
+        trainingRMSE = math.sqrt(metrics.mean_squared_error(
+            trainingExample["targets"], trainingPredictions))
 
-		validationRMSE = math.sqrt(metrics.mean_squared_error(validationExample["targets"], validationPredictions));
+        validationPredictions = linearRegressor.predict(
+            input_fn=predictValidationInputFun)
 
-		print("\t%2d %0.2f %0.2f" % (i, trainingRMSE, validationRMSE));
+        validationPredictions = np.array(
+            [i["predictions"][0] for i in validationPredictions])
 
-		trainingRMSEs.append(trainingRMSE);
-		validationRMSEs.append(validationRMSE);
-		
-	print("Finished Training!");
+        validationRMSE = math.sqrt(metrics.mean_squared_error(
+            validationExample["targets"], validationPredictions))
 
-	plt.figure();
+        print("\t%2d %0.2f %0.2f" % (i, trainingRMSE, validationRMSE))
 
-	plt.ylabel("RMSE");
-	plt.xlabel("Periods");
-	plt.title("RMSE vs. Priods");
+        trainingRMSEs.append(trainingRMSE)
 
-	plt.tight_layout();
+        validationRMSEs.append(validationRMSE)
 
-	plt.plot(trainingRMSEs, label = "training");
-	plt.plot(validationRMSEs, label = "validations");
+    print("Finished Training!")
 
-	plt.legend();
+    plt.figure()
+
+    plt.ylabel("RMSE")
+    plt.xlabel("Periods")
+    plt.title("RMSE vs. Priods")
+
+    plt.tight_layout()
+
+    plt.plot(trainingRMSEs, label="training")
+    plt.plot(validationRMSEs, label="validations")
+
+    plt.legend()
+
+    return linearRegressor
 
 
-	return linearRegressor;
+pd.options.display.float_format = "{:.2f}".format
+dataFrame = pd.read_csv("E:/Study/Python/Machine-Learning/data.csv", sep=',')
+dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index))
+print(dataFrame.describe())
 
+# selectedFeatureList = [
+#    "latitude",
+#    "longitude",
+#    "housing_median_age",
+#    "total_rooms",
+#    "population",
+#    "households",
+#    "median_income"
+# ]
+selectedFeatureList = [
+    "median_income",
+    "households",
+    "latitude",
+]
+features = preprocessFeatures(dataFrame, selectedFeatureList)
+targets = preprocessTargets(dataFrame)
 
-pd.options.display.float_format = "{:.2f}".format;
+correlation = features.copy()
+correlation["targets"] = targets["median_house_value"]
+print(correlation.corr())
 
-dataFrame = pd.read_csv("E:/Study/Python/Machine-Learning/data.csv", sep = ',');
-
-dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index));
-
-features = preprocessFeatures(dataFrame);
-targets = preprocessTargets(dataFrame);
-''
 trainingExample = {
-	"features" : features.head(15000),
-	"targets" : targets.head(15000),
+    "features": features.head(15000),
+    "targets": targets.head(15000),
 }
 
-validactionExample = {
-	"features" : features.tail(2000),
-	"targets" : targets.tail(2000),
+validationExample = {
+    "features": features.tail(2000),
+    "targets": targets.tail(2000),
 }
 
-# trainModel(learningRate, steps, batchSize, trainingExample, validationExample):
 
-linearRegressor = trainModel(learningRate = 0.02, steps = 500, batchSize = 100, trainingExample = trainingExample, validationExample = validactionExample);
+linearRegressor = trainModel(learningRate=0.01, steps=1000, batchSize=100,
+                             trainingExample=trainingExample,
+                             validationExample=validationExample)
 
-plt.show();
+testDataFrame = pd.read_csv(
+    "E:/Study/Python/Machine-Learning/test.csv", sep=',')
+testFeatures = preprocessFeatures(testDataFrame, selectedFeatureList)
+testTargets = preprocessTargets(testDataFrame)
+testExample = {
+    "features": testFeatures,
+    "targets": testTargets,
+}
+
+
+def predictTestInputFun(): return inputFun(testExample, 1, False, 1)
+
+
+testPredictions = linearRegressor.predict(input_fn=predictTestInputFun)
+testPredictions = np.array([i['predictions'][0] for i in testPredictions])
+rmse = math.sqrt(metrics.mean_squared_error(
+    testExample["targets"], testPredictions))
+print(rmse)
+plt.show()

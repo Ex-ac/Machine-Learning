@@ -3,10 +3,10 @@ import tensorflow as tf
 '''
 
 try:
-	tf.contrib.eager.enable_eager_execution();
-	print("TF imported with eager execution!");
+    tf.contrib.eager.enable_eager_execution();
+    print("TF imported with eager execution!");
 except ValueError:
-	print("TF already imported with eager execution!");
+    print("TF already imported with eager execution!");
 
 primes = tf.constant([2, 3, 5, 7, 11, 13], dtype = tf.int32);
 print("primes:", primes);
@@ -21,7 +21,6 @@ twos = tf.constant([2, 2, 2, 2, 2, 2], dtype = tf.int32);
 primesDoubled = primes * twos;
 print("primes doubled:", primesDoubled);
 
-# 效果与先创建twos在相乘相同 
 temp = primes * 2;
 print("temp:", temp);
 '''
@@ -87,10 +86,11 @@ c = tf.matmul(reshapedA_2x3, reshapedB_3x1);
 print(c.numpy());
 '''
 try:
-	tf.contrib.eager.enable_eager_execution();
-	print("TF imported with eager execution!");
-except:
-	print("TF already imported with eager execution!");
+    tf.contrib.eager.enable_eager_execution()
+    print("TF imported with eager execution!")
+
+except Exception as e:
+    print("TF already imported with eager execution!")
 
 # Create a scalar variable with the initial value 3.
 v = tf.contrib.eager.Variable([3])
@@ -115,28 +115,29 @@ v = tf.contrib.eager.Variable([[1, 2, 3], [4, 5, 6]])
 print(v.numpy())
 
 try:
-	print("Assigning [7, 8, 9] to v")
-	v.assign([7, 8, 9])
+    print("Assigning [7, 8, 9] to v")
+    v.assign([7, 8, 9])
 except ValueError as e:
-  print("Exception:", e)
+    print("Exception:", e)
 
-import tensorflow as tf
 
 try:
-	tf.contrib.eager.enable_eager_execution();
+    tf.contrib.eager.enable_eager_execution()
 
-	print("TF imported with eager execution!");
-except:
-	print("TF already imported with eager execution!");
+    print("TF imported with eager execution!")
+except Exception as e:
+    print("TF already imported with eager execution!")
 
-die1 = tf.contrib.eager.Variable(tf.random_uniform([10, 1], minval = 1, maxval = 7, dtype = tf.int32));
+die1 = tf.contrib.eager.Variable(tf.random_uniform(
+    [10, 1], minval=1, maxval=7, dtype=tf.int32))
 
-die2 = tf.contrib.eager.Variable(tf.random_uniform([10, 1], minval = 1, maxval = 7, dtype = tf.int32));
+die2 = tf.contrib.eager.Variable(tf.random_uniform(
+    [10, 1], minval=1, maxval=7, dtype=tf.int32))
 
-sum = tf.add(die2, die2);
+sum = tf.add(die2, die2)
 
-resultMatrix = tf.concat(values = [die1, die2, sum], axis = 1);
-print(resultMatrix.numpy());
+resultMatrix = tf.concat(values=[die1, die2, sum], axis=1)
+print(resultMatrix.numpy())
 
 
 die1 = tf.contrib.eager.Variable(
@@ -148,4 +149,4 @@ dice_sum = tf.add(die1, die2)
 resulting_matrix = tf.concat(values=[die1, die2, dice_sum], axis=1)
 
 
-print(resulting_matrix.numpy());
+print(resulting_matrix.numpy())

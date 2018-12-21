@@ -10,6 +10,6 @@ from sklearn import metrics
 import tensorflow as tf
 from tensorflow.python.data import Dataset
 
-tf.logging.set_verbosity(tf.logging.ERROR);
-pd.options.display.max_row = 10;
+tf.logging.set_verbosity(tf.logging.ERROR)
+pd.options.display.max_row = 10
 pd.options.display.float

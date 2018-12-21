@@ -12,151 +12,183 @@ from sklearn import metrics
 import tensorflow as tf
 from tensorflow.python.data import Dataset
 
+
 def preprocessFeatures(dataFrame, selectedFeatures):
-	
-	features = pd.DataFrame();
 
-	features = dataFrame[selectedFeatures];
+    features = pd.DataFrame()
 
-	features["rooms_per_person"] = (dataFrame["total_rooms"] / dataFrame["population"]);
+    features = dataFrame[selectedFeatures]
 
-	return features;
+    features["rooms_per_person"] = (
+        dataFrame["total_rooms"] / dataFrame["population"])
+
+    return features
+
 
 def preprocessTargets(dataFrame):
 
-	targets = pd.DataFrame();
-	
-	targets["median_house_value"] = dataFrame["median_house_value"] / 1000.0;
-	
-	return targets;
+    targets = pd.DataFrame()
+
+    targets["median_house_value"] = dataFrame["median_house_value"] / 1000.0
+
+    return targets
+
 
 def createFeatureColumns(dataFrame):
-	return set([tf.feature_column.numeric_column(i) for i in dataFrame]);
-
-def inputFun(inputFeatures, inputTargets, batchSize = 1, shuffle = True, numEpoch = None):
-	features = {key : np.array(value) for key, value in dict(inputFeatures).items()};
-
-	ds = Dataset.from_tensor_slices((features, inputTargets));
-	ds = ds.batch(batchSize).repeat(numEpoch);
-
-	if shuffle:
-		ds = ds.shuffle(10000);
-	
-	features, targets = ds.make_one_shot_iterator().get_next();
-	return features, targets;
-
-def trainModel(learningRate, steps, trainFeatures, trainTargets, batchSize, validationFeaturs, validationTargets):
-	periods = 10;
-	steps_per_period = steps / periods;
+    return set([tf.feature_column.numeric_column(i) for i in dataFrame])
 
 
-	optimizer = tf.train.GradientDescentOptimizer(learningRate);
-	optimizer = tf.contrib.estimator.clip_gradients_by_norm(optimizer, 5.0);
+def inputFun(inputFeatures,
+             inputTargets,
+             batchSize=1,
+             shuffle=True,
+             numEpoch=None):
 
-	linearRegressor = tf.estimator.LinearRegressor(feature_columns = createFeatureColumns(trainFeatures), optimizer = optimizer);
+    features = {key: np.array(value)
+                for key, value in dict(inputFeatures).items()}
+
+    ds = Dataset.from_tensor_slices((features, inputTargets))
+    ds = ds.batch(batchSize).repeat(numEpoch)
+
+    if shuffle:
+        ds = ds.shuffle(10000)
+
+    features, targets = ds.make_one_shot_iterator().get_next()
+    return features, targets
 
 
-	trainInputFun = lambda : inputFun(trainFeatures, trainTargets, batchSize);
+def trainModel(learningRate, steps, trainFeatures, trainTargets, batchSize,
+               validationFeaturs, validationTargets):
+    periods = 10
+    steps_per_period = steps / periods
 
-	predictTrainInputFun = lambda : inputFun(trainFeatures, trainTargets, 1, False, 1);
+    optimizer = tf.train.GradientDescentOptimizer(learningRate)
+    optimizer = tf.contrib.estimator.clip_gradients_by_norm(optimizer, 5.0)
 
-	predictValidationInputFun = lambda : inputFun(validationFeaturs, validationTargets, 1, False, 1);
+    linearRegressor = tf.estimator.LinearRegressor(
+        feature_columns=createFeatureColumns(trainFeatures),
+        optimizer=optimizer)
 
-	trainRMSEs = [];
-	validationRMSEs = [];
+    def trainInputFun(): return inputFun(trainFeatures, trainTargets,
+                                         batchSize)
 
-	print("Train Model...");
+    def predictTrainInputFun(): return inputFun(
+        trainFeatures, trainTargets, 1, False, 1)
 
-	for i in range(0, periods):
-		
-		linearRegressor.train(input_fn = trainInputFun, steps = steps_per_period);
+    def predictValidationInputFun(): return inputFun(
+        validationFeaturs, validationTargets, 1, False, 1)
 
-		trainPredictions = linearRegressor.predict(input_fn = predictTrainInputFun);
+    trainRMSEs = []
+    validationRMSEs = []
 
-		trainPredictions = np.array([i["predictions"][0] for i in trainPredictions]);
+    print("Train Model...")
 
-		trainRMSE = math.sqrt(metrics.mean_squared_error(trainTargets, trainPredictions));
+    for i in range(0, periods):
 
-		trainRMSEs.append(trainRMSE);
-				
-		validationPredictions = linearRegressor.predict(input_fn = predictValidationInputFun);
+        linearRegressor.train(input_fn=trainInputFun, steps=steps_per_period)
 
-		validationPredictions = np.array([i["predictions"][0] for i in validationPredictions]);
+        trainPredictions = linearRegressor.predict(
+            input_fn=predictTrainInputFun)
 
-		validationRMSE = math.sqrt(metrics.mean_squared_error(validationTargets, validationPredictions));
+        trainPredictions = np.array([i["predictions"][0] for i in
+                                     trainPredictions])
 
-		validationRMSEs.append(validationRMSE);
-		
-		print("\t%2d %0.2f %0.2f" % (i, trainRMSE, validationRMSE));
-	print("Train finished");
+        trainRMSE = math.sqrt(metrics.mean_squared_error(
+            trainTargets, trainPredictions))
 
-	plt.figure();
+        trainRMSEs.append(trainRMSE)
 
-	plt.plot(trainRMSEs, label = "Training");
-	plt.plot(validationRMSEs, label = "Validation");
+        validationPredictions = linearRegressor.predict(
+            input_fn=predictValidationInputFun)
 
-	plt.legend();
+        validationPredictions = np.array(
+            [i["predictions"][0] for i in validationPredictions])
 
-	return linearRegressor;
+        validationRMSE = math.sqrt(metrics.mean_squared_error(
+            validationTargets, validationPredictions))
+
+        validationRMSEs.append(validationRMSE)
+
+        print("\t%2d %0.2f %0.2f" % (i, trainRMSE, validationRMSE))
+    print("Train finished")
+
+    plt.figure()
+
+    plt.plot(trainRMSEs, label="Training")
+    plt.plot(validationRMSEs, label="Validation")
+
+    plt.legend()
+
+    return linearRegressor
+
 
 def selectedAndTransdormFeatures(dataFrame):
-	selectedFeatures = pd.DataFrame();
-	selectedFeatures["median_income"] = dataFrame["median_income"];
+    selectedFeatures = pd.DataFrame()
+    selectedFeatures["median_income"] = dataFrame["median_income"]
 
-	for r in zip(range(32, 44), range(33, 45)):
-		selectedFeatures["latitude_%d_to_%d" % r] = dataFrame["latitude"].apply(lambda x : 1.0 if x >= r[0] and x < r[1] else 0.0);
-	
-	return selectedFeatures;
+    for r in zip(range(32, 44), range(33, 45)):
+        selectedFeatures["latitude_%d_to_%d" % r] = dataFrame["latitude"].apply(
+            lambda x: 1.0 if x >= r[0] and x < r[1] else 0.0)
 
-pd.options.display.float_format = "{:.2f}".format;
-
-dataFrame = pd.read_csv("./data.csv");
-
-dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index));
-
-selectedFeatures = ["median_house_value", "latitude"];
-print(selectedFeatures);
-
-featuresDataFrame = preprocessFeatures(dataFrame, selectedFeatures);
-targetsDataFrame = preprocessTargets(dataFrame);
+    return selectedFeatures
 
 
-corrDataFrame = featuresDataFrame.copy();
+pd.options.display.float_format = "{:.2f}".format
 
-corrDataFrame["target"] = targetsDataFrame["median_house_value"];
+dataFrame = pd.read_csv("./data.csv")
 
-print(corrDataFrame.corr());
+dataFrame = dataFrame.reindex(np.random.permutation(dataFrame.index))
 
-plt.scatter(featuresDataFrame["latitude"], targetsDataFrame["median_house_value"])
+selectedFeatures = ["median_house_value", "latitude"]
+print(selectedFeatures)
 
-featuresDataFrame = selectedAndTransdormFeatures(dataFrame);
-
-trainFeatures = featuresDataFrame.head(12000);
-trainTargets = targetsDataFrame.head(12000);
-
-
-validationFeaturs = featuresDataFrame.tail(5000);
-validationTargets = targetsDataFrame.tail(5000);
-
-linearRegressor = trainModel(0.01, 1500, trainFeatures, trainTargets, 50, validationFeaturs, validationTargets);
-
-testDataFrame = pd.read_csv("./test.csv");
-
-testFeatures = selectedAndTransdormFeatures(testDataFrame);
-testTargets = preprocessTargets(testDataFrame);
-
-testPredictFun = lambda : inputFun(testFeatures, testTargets, 1, False, 1);
-testPredictions = linearRegressor.predict(input_fn = testPredictFun);
-
-testPredictions = np.array([i["predictions"][0] for i in testPredictions]);
+featuresDataFrame = preprocessFeatures(dataFrame, selectedFeatures)
+targetsDataFrame = preprocessTargets(dataFrame)
 
 
+corrDataFrame = featuresDataFrame.copy()
 
-testRMSE = math.sqrt(metrics.mean_squared_error(testTargets, testPredictions));
+corrDataFrame["target"] = targetsDataFrame["median_house_value"]
 
-print(testRMSE);
+print(corrDataFrame.corr())
 
-plt.show();
+plt.scatter(featuresDataFrame["latitude"],
+            targetsDataFrame["median_house_value"])
 
-		
+featuresDataFrame = selectedAndTransdormFeatures(dataFrame)
 
+trainFeatures = featuresDataFrame.head(12000)
+trainTargets = targetsDataFrame.head(12000)
+
+
+validationFeaturs = featuresDataFrame.tail(5000)
+validationTargets = targetsDataFrame.tail(5000)
+
+linearRegressor = trainModel(
+    0.01,
+    1500,
+    trainFeatures,
+    trainTargets,
+    50,
+    validationFeaturs,
+    validationTargets)
+
+testDataFrame = pd.read_csv("./test.csv")
+
+testFeatures = selectedAndTransdormFeatures(testDataFrame)
+testTargets = preprocessTargets(testDataFrame)
+
+
+def testPredictFun(): return inputFun(testFeatures, testTargets, 1, False, 1)
+
+
+testPredictions = linearRegressor.predict(input_fn=testPredictFun)
+
+testPredictions = np.array([i["predictions"][0] for i in testPredictions])
+
+
+testRMSE = math.sqrt(metrics.mean_squared_error(testTargets, testPredictions))
+
+print(testRMSE)
+
+plt.show()
